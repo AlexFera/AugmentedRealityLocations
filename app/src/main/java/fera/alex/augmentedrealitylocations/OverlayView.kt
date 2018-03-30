@@ -9,12 +9,15 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
+import android.util.Log
 import android.view.View
 import com.wonderkiln.camerakit.CameraView
 import com.google.maps.GeoApiContext
 import com.google.maps.PlacesApi
 import com.google.maps.model.LatLng
 import com.google.maps.model.PlaceType
+import android.graphics.RectF
+
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
     private var cameraView: CameraView
@@ -25,12 +28,14 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
     private var horizontalFOV: Float = 0.0f
     private var viewportHeight = 0.0f
     private var viewportWidth = 0.0f
-    private var nearbyLocations = mutableListOf<NearbyLocation>()
+    private var nearbyPlaces = mutableListOf<NearbyPlace>()
     private var arePaintsConfigured = false
     private var textPaint: Paint
     private var outlinePaint: Paint
     private var bubblePaint: Paint
     private var currentAzimuth = 0.0f
+    private var currentPitch = 0.0f
+    private var bubble: RectF
     private lateinit var lastLocation: Location
 
     init {
@@ -46,6 +51,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         this.outlinePaint.strokeWidth = 2f
         this.bubblePaint.style = Paint.Style.FILL
         this.arePaintsConfigured = true
+        this.bubble = RectF()
     }
 
     fun onLocationChanged(location: Location) {
@@ -54,15 +60,15 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         val context = GeoApiContext.Builder().apiKey("AIzaSyAon5czn9QT7u_Odl_lq0C0MINyQBwQrek").build()
         val response = PlacesApi.nearbySearchQuery(context, LatLng(lastLocation.latitude, lastLocation.longitude))
                 .radius(1000)
-                .type(PlaceType.BUS_STATION, PlaceType.GAS_STATION, PlaceType.MUSEUM, PlaceType.HOSPITAL,
-                        PlaceType.FIRE_STATION, PlaceType.HEALTH, PlaceType.LIBRARY, PlaceType.LODGING,
+                .type(PlaceType.MUSEUM, PlaceType.HOSPITAL,
+                        PlaceType.HEALTH, PlaceType.LIBRARY, PlaceType.LODGING,
                         PlaceType.UNIVERSITY, PlaceType.TRAIN_STATION, PlaceType.SUBWAY_STATION, PlaceType.RESTAURANT)
                 .awaitIgnoreError()
 
-        nearbyLocations = mutableListOf()
+        nearbyPlaces = mutableListOf()
         for (result in response.results) {
-            val nearbyLocation = NearbyLocation(result.name, result.geometry.location.lat, result.geometry.location.lng)
-            nearbyLocations.add(nearbyLocation)
+            val nearbyLocation = NearbyPlace(result.name, result.geometry.location.lat, result.geometry.location.lng, 0f, 0f, 0)
+            nearbyPlaces.add(nearbyLocation)
         }
     }
 
@@ -73,10 +79,10 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         val verticalFOV = cameraView.cameraProperties?.verticalViewingAngle
         val horizontalFOV = cameraView.cameraProperties?.horizontalViewingAngle
 
-        if (::lastLocation.isInitialized && horizontalFOV != null && verticalFOV != null && !nearbyLocations.isEmpty()) {
+        if (::lastLocation.isInitialized && horizontalFOV != null && verticalFOV != null && !nearbyPlaces.isEmpty()) {
             val location = Location("manual")
-            location.longitude = nearbyLocations[0].longitude
-            location.latitude = nearbyLocations[0].latitude
+            location.longitude = nearbyPlaces[0].longitude
+            location.latitude = nearbyPlaces[0].latitude
 
             val currentBearing = lastLocation.bearingTo(location)
             val orientation = SensorUtilities.computeDeviceOrientation(lastGravityData, lastGeomagneticData)
@@ -99,7 +105,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             canvas.drawCircle((canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), 8.0f, contentPaint)
 
             val distanceTo = lastLocation.distanceTo(location)
-            canvas.drawText(nearbyLocations[0].name + " " + distanceTo.roundToInt() + " metri" , (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
+            canvas.drawText(nearbyPlaces[0].name + " " + distanceTo.roundToInt() + " metri" , (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
         }
     }
     */
@@ -107,7 +113,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
 
-        if (nearbyLocations.isEmpty()){
+        if (nearbyPlaces.isEmpty()){
             return
         }
 
@@ -116,39 +122,35 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             return
         }
 
-        if (nearbyLocations.isNotEmpty()){
+        if (nearbyPlaces.isNotEmpty()){
             // Center of view
-            val x = canvas!!.width / 2
-            val y = canvas.height / 2
+            val x = canvas!!.width / 2f
+            val y = canvas.height / 2f
 
+            val dy = this.currentPitch * this.viewportHeight
             // Iterate backwards to draw more distant places first
-            for (nearbyPlace in nearbyLocations.asReversed()){
+            for (nearbyPlace in nearbyPlaces.asReversed()){
                 val degreesToTarget = this.currentAzimuth - getBearingToPlace(nearbyPlace)
                 val dx = this.viewportWidth * degreesToTarget
-            }
-        }
-    }
+                nearbyPlace.iconX = x - dx
+                nearbyPlace.iconY = y - dy
+                nearbyPlace.distanceToPlace = this.getDistanceToPlace(nearbyPlace)
 
-    private fun calculateViewPorts(canvas: Canvas?) {
-        if (this.cameraView.cameraProperties != null) {
-            this.verticalFOV = this.cameraView.cameraProperties!!.verticalViewingAngle
-            this.horizontalFOV = this.cameraView.cameraProperties!!.horizontalViewingAngle
-            if (!this.viewPortsCalculated && this.verticalFOV > 0 && this.horizontalFOV > 0) {
-                if (canvas != null) {
-                    this.viewportHeight = canvas.height / verticalFOV
-                    this.viewportWidth = canvas.width / horizontalFOV
-                    this.viewPortsCalculated = true
+                var angleToTarget = degreesToTarget
+                if (degreesToTarget < 0) {
+                    angleToTarget = 360 + degreesToTarget
+                }
+                if (angleToTarget >= 0 && angleToTarget < 90) {
+                    drawInQuadrant(canvas, 1, nearbyPlace)
+                } else if (angleToTarget >= 90 && angleToTarget < 180) {
+                    drawInQuadrant(canvas, 2, nearbyPlace)
+                } else if (angleToTarget >= 180 && angleToTarget < 270) {
+                    drawInQuadrant(canvas, 3, nearbyPlace)
+                } else {
+                    drawInQuadrant(canvas, 4, nearbyPlace)
                 }
             }
         }
-    }
-
-    private fun getBearingToPlace(nearbyPlace: NearbyLocation): Float {
-        val location = Location("manual")
-        location.longitude = nearbyPlace.longitude
-        location.latitude = nearbyPlace.latitude
-
-        return lastLocation.bearingTo(location)
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -172,12 +174,11 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             }
 
             // Convert pitch and roll from radians to degrees
-            val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
-            val roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+            this.currentPitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
 
             // Update the OverlayDisplayView to redraw when sensor data changes,
             // redrawing only when the camera is not pointing straight up or down
-            if (pitch <= 75 && pitch >= -75) {
+            if ( this.currentPitch <= 75 &&  this.currentPitch >= -75) {
                 this.invalidate()
             }
         }
@@ -195,5 +196,65 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         sensors.registerListener(this, accelerometerSensor, SensorManager.SENSOR_DELAY_NORMAL)
         sensors.registerListener(this, compassSensor, SensorManager.SENSOR_DELAY_NORMAL)
         sensors.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+
+    private fun calculateViewPorts(canvas: Canvas?) {
+        if (this.cameraView.cameraProperties != null) {
+            this.verticalFOV = this.cameraView.cameraProperties!!.verticalViewingAngle
+            this.horizontalFOV = this.cameraView.cameraProperties!!.horizontalViewingAngle
+            if (!this.viewPortsCalculated && this.verticalFOV > 0 && this.horizontalFOV > 0) {
+                if (canvas != null) {
+                    this.viewportHeight = canvas.height / verticalFOV
+                    this.viewportWidth = canvas.width / horizontalFOV
+                    this.viewPortsCalculated = true
+                }
+            }
+        }
+    }
+
+    private fun getBearingToPlace(nearbyPlace: NearbyPlace): Float {
+        val location = Location("manual")
+        location.longitude = nearbyPlace.longitude
+        location.latitude = nearbyPlace.latitude
+
+        return lastLocation.bearingTo(location)
+    }
+
+    private fun getDistanceToPlace(nearbyPlace: NearbyPlace): Int {
+        val location = Location("manual")
+        location.longitude = nearbyPlace.longitude
+        location.latitude = nearbyPlace.latitude
+
+        return lastLocation.distanceTo(location).toInt()
+    }
+
+    private fun drawInQuadrant(canvas: Canvas, quadrantId: Int, nearbyPlace: NearbyPlace){
+        Log.i("test", "quadrantId: $quadrantId ${nearbyPlace.name}")
+
+        nearbyPlace.iconY += this.nearbyPlaces.indexOf(nearbyPlace) * 40f
+        val canvasRightMargin = 5f
+        val iconHeight = 48f
+        val iconWidth = 48f
+        val textX = nearbyPlace.iconX + iconWidth
+        val nameY = nearbyPlace.iconY + iconHeight / 2.4f
+        val distanceY = nameY + iconHeight / 2.1f
+
+        val left = nearbyPlace.iconX
+        val top = nearbyPlace.iconY
+        val bottom = top + iconHeight
+        val right = left + iconWidth + this.textPaint.measureText(nearbyPlace.name) + canvasRightMargin
+        this.bubble.set(left, top, right, bottom)
+        val bubbleColor = Color.RED
+        this.textPaint.alpha = 148
+        this.bubblePaint.color = bubbleColor
+        this.bubblePaint.alpha = 98
+        this.outlinePaint.color = bubbleColor
+        this.outlinePaint.alpha = 32
+
+        val cornerRadius = 5f
+        canvas.drawRoundRect(this.bubble, cornerRadius, cornerRadius, this.bubblePaint)
+        canvas.drawRoundRect(this.bubble, cornerRadius, cornerRadius, this.bubblePaint)
+        canvas.drawText(nearbyPlace.name, textX, nameY, this.textPaint)
+        canvas.drawText(nearbyPlace.distanceToPlace.toString() + " metri", textX, distanceY, this.textPaint)
     }
 }
