@@ -75,7 +75,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
 
-        if (nearbyPlaces.isEmpty()){
+        if (nearbyPlaces.isEmpty()) {
             return
         }
 
@@ -84,33 +84,21 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             return
         }
 
-        if (nearbyPlaces.isNotEmpty()){
+        if (nearbyPlaces.isNotEmpty()) {
             // Center of view
             val x = canvas!!.width / 2f
             val y = canvas.height / 2f
 
             val dy = this.currentPitch * this.viewportHeight
             // Iterate backwards to draw more distant places first
-            for (nearbyPlace in nearbyPlaces.asReversed()){
+            for (nearbyPlace in nearbyPlaces.asReversed()) {
                 val degreesToTarget = this.currentAzimuth - getBearingToPlace(nearbyPlace)
                 val dx = this.viewportWidth * degreesToTarget
                 nearbyPlace.iconX = x - dx
                 nearbyPlace.iconY = y - dy
                 nearbyPlace.distanceToPlace = this.getDistanceToPlace(nearbyPlace)
 
-                var angleToTarget = degreesToTarget
-                if (degreesToTarget < 0) {
-                    angleToTarget = 360 + degreesToTarget
-                }
-                if (angleToTarget >= 0 && angleToTarget < 90) {
-                    drawInQuadrant(canvas, 1, nearbyPlace)
-                } else if (angleToTarget >= 90 && angleToTarget < 180) {
-                    drawInQuadrant(canvas, 2, nearbyPlace)
-                } else if (angleToTarget >= 180 && angleToTarget < 270) {
-                    drawInQuadrant(canvas, 3, nearbyPlace)
-                } else {
-                    drawInQuadrant(canvas, 4, nearbyPlace)
-                }
+                drawInQuadrant(canvas, nearbyPlace)
             }
         }
     }
@@ -138,11 +126,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             // Convert pitch and roll from radians to degrees
             this.currentPitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
 
-            // Update the OverlayDisplayView to redraw when sensor data changes,
-            // redrawing only when the camera is not pointing straight up or down
-            if (this.currentPitch <= 75 ||  this.currentPitch >= -75) {
-                this.invalidate()
-            }
+            this.invalidate()
         }
     }
 
@@ -190,9 +174,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         return lastLocation.distanceTo(location).toInt()
     }
 
-    private fun drawInQuadrant(canvas: Canvas, quadrantId: Int, nearbyPlace: NearbyPlace){
-        Log.i("test", "quadrantId: $quadrantId ${nearbyPlace.name}")
-
+    private fun drawInQuadrant(canvas: Canvas, nearbyPlace: NearbyPlace) {
         nearbyPlace.iconY += this.nearbyPlaces.indexOf(nearbyPlace) * 40f
         val canvasRightMargin = 5f
         val iconHeight = 48f
