@@ -20,19 +20,21 @@ import com.google.maps.model.LatLng
 import com.google.maps.model.PlaceType
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
-    private var accelerometerData = "Accelerometer Data"
-    private var compassData = "Compass Data"
-    private var gyroData = "Gyro Data"
     private var cameraView: CameraView
     private var lastGravityData = FloatArray(size = 9)
     private var lastGeomagneticData = FloatArray(size = 9)
-    private lateinit var nearbyLocations: List<NearbyLocation>
+    private var contentPaint: Paint
+    private lateinit var nearbyLocations: MutableList<NearbyLocation>
     private lateinit var lastLocation: Location
-    private lateinit var testLocation: Location
 
     init {
         registerSensorChanges(context)
         this.cameraView = cameraView
+        this.contentPaint = Paint(ANTI_ALIAS_FLAG)
+        this.contentPaint.textAlign = Align.CENTER
+        this.contentPaint.textSize = 20F
+        this.contentPaint.isAntiAlias = true
+        this.contentPaint.color = Color.RED
     }
 
     fun onLocationChanged(location: Location) {
@@ -46,35 +48,31 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
                         PlaceType.UNIVERSITY, PlaceType.TRAIN_STATION, PlaceType.SUBWAY_STATION, PlaceType.RESTAURANT)
                 .awaitIgnoreError()
 
+        nearbyLocations = mutableListOf()
         for (result in response.results) {
             val nearbyLocation = NearbyLocation(result.name, result.geometry.location.lat, result.geometry.location.lng)
+            nearbyLocations.add(nearbyLocation)
         }
-
-        testLocation = Location("manual")
-        testLocation.latitude = response.results[0].geometry.location.lat
-        testLocation.longitude = response.results[0].geometry.location.lng
     }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
 
-        val contentPaint = Paint(ANTI_ALIAS_FLAG)
-        contentPaint.textAlign = Align.CENTER
-        contentPaint.textSize = 20F
-        contentPaint.isAntiAlias = true
-        contentPaint.color = Color.RED
-
         val verticalFOV = cameraView.cameraProperties?.verticalViewingAngle
         val horizontalFOV = cameraView.cameraProperties?.horizontalViewingAngle
 
-        if (::lastLocation.isInitialized && horizontalFOV != null && verticalFOV != null && ::testLocation.isInitialized) {
-            val currentBearing = lastLocation.bearingTo(testLocation)
+        if (::lastLocation.isInitialized && horizontalFOV != null && verticalFOV != null && !nearbyLocations.isEmpty()) {
+            val location = Location("manual")
+            location.longitude = nearbyLocations[0].longitude
+            location.latitude = nearbyLocations[0].latitude
+
+            val currentBearing = lastLocation.bearingTo(location)
             val orientation = SensorUtilities.computeDeviceOrientation(lastGravityData, lastGeomagneticData)
             // use roll for screen rotation
             canvas?.rotate((0.0f - Math.toDegrees(orientation[2].toDouble())).toFloat())
             // Translate, but normalize for the FOV of the camera -- basically, pixels per degree, times degrees == pixels
             val dx = (canvas?.width!! / horizontalFOV * (Math.toDegrees(orientation[0].toDouble()) - currentBearing))
-            val dy = (canvas.height / verticalFOV!! * Math.toDegrees(orientation[1].toDouble()))
+            val dy = (canvas.height / verticalFOV * Math.toDegrees(orientation[1].toDouble()))
 
             // wait to translate the dx so the horizon doesn't get pushed off
             canvas.translate(0.0f, (0.0f - dy).toFloat())
@@ -88,27 +86,19 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             // draw our point -- we've rotated and translated this to the right spot already
             canvas.drawCircle((canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), 8.0f, contentPaint)
 
-            canvas.drawText("Guvernul României", (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
+            canvas.drawText(nearbyLocations[0].name, (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event != null) {
-            val msg = StringBuilder(event.sensor.name).append(" ")
-            for (value in event.values) {
-                msg.append("[").append(value).append("]")
-            }
-
             when (event.sensor.type) {
                 Sensor.TYPE_ACCELEROMETER -> {
-                    accelerometerData = msg.toString()
                     lastGravityData = SensorUtilities.filterSensors(event.values, lastGravityData)
                 }
                 Sensor.TYPE_GYROSCOPE -> {
-                    gyroData = msg.toString()
                 }
                 Sensor.TYPE_MAGNETIC_FIELD -> {
-                    compassData = msg.toString()
                     lastGeomagneticData = SensorUtilities.filterSensors(event.values, lastGeomagneticData)
                 }
             }
