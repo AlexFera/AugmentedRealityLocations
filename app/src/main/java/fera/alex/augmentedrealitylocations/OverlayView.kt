@@ -21,8 +21,8 @@ import android.graphics.RectF
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
     private var cameraView: CameraView
-    private var lastGravityData = FloatArray(size = 9)
-    private var lastGeomagneticData = FloatArray(size = 9)
+    private var lastGravityData = FloatArray(size = 3)
+    private var lastGeomagneticData = FloatArray(size = 3)
     private var viewPortsCalculated = false
     private var verticalFOV: Float = 0.0f
     private var horizontalFOV: Float = 0.0f
@@ -71,44 +71,6 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             nearbyPlaces.add(nearbyLocation)
         }
     }
-
-    /*
-    override fun onDraw(canvas: Canvas?) {
-        super.onDraw(canvas)
-
-        val verticalFOV = cameraView.cameraProperties?.verticalViewingAngle
-        val horizontalFOV = cameraView.cameraProperties?.horizontalViewingAngle
-
-        if (::lastLocation.isInitialized && horizontalFOV != null && verticalFOV != null && !nearbyPlaces.isEmpty()) {
-            val location = Location("manual")
-            location.longitude = nearbyPlaces[0].longitude
-            location.latitude = nearbyPlaces[0].latitude
-
-            val currentBearing = lastLocation.bearingTo(location)
-            val orientation = SensorUtilities.computeDeviceOrientation(lastGravityData, lastGeomagneticData)
-            // use roll for screen rotation
-            canvas?.rotate((0.0f - Math.toDegrees(orientation[2].toDouble())).toFloat())
-            // Translate, but normalize for the FOV of the camera -- basically, pixels per degree, times degrees == pixels
-            val dx = (canvas?.width!! / horizontalFOV * (Math.toDegrees(orientation[0].toDouble()) - currentBearing))
-            val dy = (canvas.height / verticalFOV * Math.toDegrees(orientation[1].toDouble()))
-
-            // wait to translate the dx so the horizon doesn't get pushed off
-            canvas.translate(0.0f, (0.0f - dy).toFloat())
-
-            // make our line big enough to draw regardless of rotation and translation
-            canvas.drawLine(0f - canvas.height, (canvas.height / 2).toFloat(), (canvas.width + canvas.height).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
-
-            // now translate the dx
-            canvas.translate((0.0f - dx).toFloat(), 0.0f)
-
-            // draw our point -- we've rotated and translated this to the right spot already
-            canvas.drawCircle((canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), 8.0f, contentPaint)
-
-            val distanceTo = lastLocation.distanceTo(location)
-            canvas.drawText(nearbyPlaces[0].name + " " + distanceTo.roundToInt() + " metri" , (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
-        }
-    }
-    */
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
@@ -178,7 +140,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
 
             // Update the OverlayDisplayView to redraw when sensor data changes,
             // redrawing only when the camera is not pointing straight up or down
-            if ( this.currentPitch <= 75 &&  this.currentPitch >= -75) {
+            if (this.currentPitch <= 75 ||  this.currentPitch >= -75) {
                 this.invalidate()
             }
         }
