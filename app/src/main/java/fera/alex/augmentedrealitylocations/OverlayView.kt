@@ -18,13 +18,14 @@ import com.google.maps.GeoApiContext
 import com.google.maps.PlacesApi
 import com.google.maps.model.LatLng
 import com.google.maps.model.PlaceType
+import kotlin.math.roundToInt
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
     private var cameraView: CameraView
     private var lastGravityData = FloatArray(size = 9)
     private var lastGeomagneticData = FloatArray(size = 9)
     private var contentPaint: Paint
-    private lateinit var nearbyLocations: MutableList<NearbyLocation>
+    private var nearbyLocations = mutableListOf<NearbyLocation>()
     private lateinit var lastLocation: Location
 
     init {
@@ -86,7 +87,8 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             // draw our point -- we've rotated and translated this to the right spot already
             canvas.drawCircle((canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), 8.0f, contentPaint)
 
-            canvas.drawText(nearbyLocations[0].name, (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
+            val distanceTo = lastLocation.distanceTo(location)
+            canvas.drawText(nearbyLocations[0].name + " " + distanceTo.roundToInt() + " metri" , (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
         }
     }
 
