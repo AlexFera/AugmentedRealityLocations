@@ -4,38 +4,48 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Paint.ANTI_ALIAS_FLAG
-import android.graphics.Paint.Align
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
-import android.location.LocationManager
 import android.view.View
 import com.wonderkiln.camerakit.CameraView
 import com.google.maps.GeoApiContext
 import com.google.maps.PlacesApi
 import com.google.maps.model.LatLng
 import com.google.maps.model.PlaceType
-import kotlin.math.roundToInt
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
     private var cameraView: CameraView
     private var lastGravityData = FloatArray(size = 9)
     private var lastGeomagneticData = FloatArray(size = 9)
-    private var contentPaint: Paint
+    private var viewPortsCalculated = false
+    private var verticalFOV: Float = 0.0f
+    private var horizontalFOV: Float = 0.0f
+    private var viewportHeight = 0.0f
+    private var viewportWidth = 0.0f
     private var nearbyLocations = mutableListOf<NearbyLocation>()
+    private var arePaintsConfigured = false
+    private var textPaint: Paint
+    private var outlinePaint: Paint
+    private var bubblePaint: Paint
+    private var currentAzimuth = 0.0f
     private lateinit var lastLocation: Location
 
     init {
-        registerSensorChanges(context)
+        this.registerSensorChanges(context)
         this.cameraView = cameraView
-        this.contentPaint = Paint(ANTI_ALIAS_FLAG)
-        this.contentPaint.textAlign = Align.CENTER
-        this.contentPaint.textSize = 20F
-        this.contentPaint.isAntiAlias = true
-        this.contentPaint.color = Color.RED
+        this.textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        this.outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        this.bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        this.textPaint.textAlign = Paint.Align.LEFT
+        this.textPaint.textSize = 20f
+        this.textPaint.color = Color.BLACK
+        this.outlinePaint.style = Paint.Style.STROKE
+        this.outlinePaint.strokeWidth = 2f
+        this.bubblePaint.style = Paint.Style.FILL
+        this.arePaintsConfigured = true
     }
 
     fun onLocationChanged(location: Location) {
@@ -56,6 +66,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         }
     }
 
+    /*
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
 
@@ -91,6 +102,54 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
             canvas.drawText(nearbyLocations[0].name + " " + distanceTo.roundToInt() + " metri" , (canvas.width / 2).toFloat(), (canvas.height / 2).toFloat(), contentPaint)
         }
     }
+    */
+
+    override fun onDraw(canvas: Canvas?) {
+        super.onDraw(canvas)
+
+        if (nearbyLocations.isEmpty()){
+            return
+        }
+
+        this.calculateViewPorts(canvas)
+        if (!this.viewPortsCalculated) {
+            return
+        }
+
+        if (nearbyLocations.isNotEmpty()){
+            // Center of view
+            val x = canvas!!.width / 2
+            val y = canvas.height / 2
+
+            // Iterate backwards to draw more distant places first
+            for (nearbyPlace in nearbyLocations.asReversed()){
+                val degreesToTarget = this.currentAzimuth - getBearingToPlace(nearbyPlace)
+                val dx = this.viewportWidth * degreesToTarget
+            }
+        }
+    }
+
+    private fun calculateViewPorts(canvas: Canvas?) {
+        if (this.cameraView.cameraProperties != null) {
+            this.verticalFOV = this.cameraView.cameraProperties!!.verticalViewingAngle
+            this.horizontalFOV = this.cameraView.cameraProperties!!.horizontalViewingAngle
+            if (!this.viewPortsCalculated && this.verticalFOV > 0 && this.horizontalFOV > 0) {
+                if (canvas != null) {
+                    this.viewportHeight = canvas.height / verticalFOV
+                    this.viewportWidth = canvas.width / horizontalFOV
+                    this.viewPortsCalculated = true
+                }
+            }
+        }
+    }
+
+    private fun getBearingToPlace(nearbyPlace: NearbyLocation): Float {
+        val location = Location("manual")
+        location.longitude = nearbyPlace.longitude
+        location.latitude = nearbyPlace.latitude
+
+        return lastLocation.bearingTo(location)
+    }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event != null) {
@@ -104,17 +163,23 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
                     lastGeomagneticData = SensorUtilities.filterSensors(event.values, lastGeomagneticData)
                 }
             }
+            val orientation = SensorUtilities.computeDeviceOrientation(lastGravityData, lastGeomagneticData)
 
-            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            try {
-                val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                if (location != null) {
-                    lastLocation = location
-                }
-            } catch (e: SecurityException) {
+            // Convert azimuth relative to magnetic north from radians to degrees
+            this.currentAzimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            if (this.currentAzimuth < 0) {
+                this.currentAzimuth += 360f
             }
 
-            this.invalidate()
+            // Convert pitch and roll from radians to degrees
+            val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
+            val roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+
+            // Update the OverlayDisplayView to redraw when sensor data changes,
+            // redrawing only when the camera is not pointing straight up or down
+            if (pitch <= 75 && pitch >= -75) {
+                this.invalidate()
+            }
         }
     }
 
