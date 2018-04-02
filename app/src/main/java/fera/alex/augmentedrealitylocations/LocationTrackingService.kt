@@ -15,7 +15,7 @@ class LocationTrackingService : Service(), LocationListener {
     companion object {
         const val TAG = "LocationTrackingService"
 
-        const val INTERVAL = 1000.toLong() // In milliseconds
+        const val INTERVAL = 10000.toLong() // In milliseconds
         const val DISTANCE = 10.toFloat() // In meters
     }
 

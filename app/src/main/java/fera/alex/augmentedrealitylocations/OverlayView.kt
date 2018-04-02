@@ -4,20 +4,18 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
-import android.util.Log
 import android.view.View
-import com.wonderkiln.camerakit.CameraView
 import com.google.maps.GeoApiContext
 import com.google.maps.PlacesApi
 import com.google.maps.model.LatLng
 import com.google.maps.model.PlaceType
-import android.graphics.RectF
-
+import com.wonderkiln.camerakit.CameraView
 
 class OverlayView(context: Context, cameraView: CameraView) : View(context), SensorEventListener {
     private var cameraView: CameraView
@@ -60,9 +58,7 @@ class OverlayView(context: Context, cameraView: CameraView) : View(context), Sen
         val context = GeoApiContext.Builder().apiKey("AIzaSyAon5czn9QT7u_Odl_lq0C0MINyQBwQrek").build()
         val response = PlacesApi.nearbySearchQuery(context, LatLng(lastLocation.latitude, lastLocation.longitude))
                 .radius(1000)
-                .type(PlaceType.MUSEUM, PlaceType.HOSPITAL,
-                        PlaceType.HEALTH, PlaceType.LIBRARY, PlaceType.LODGING,
-                        PlaceType.UNIVERSITY, PlaceType.TRAIN_STATION, PlaceType.SUBWAY_STATION, PlaceType.RESTAURANT)
+                .type(PlaceType.RESTAURANT)
                 .awaitIgnoreError()
 
         nearbyPlaces = mutableListOf()
